@@ -1,5 +1,5 @@
 {
-  "name": "wbackup",
+  "name": "@byigitt/wbackup",
   "version": "1.0.0",
   "description": "Database backup package with webhook delivery support",
   "type": "module",
