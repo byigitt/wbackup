@@ -11,14 +11,37 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
-  "keywords": ["backup", "database", "mongodb", "postgresql", "discord", "webhook"],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "backup",
+    "database",
+    "mongodb",
+    "postgresql",
+    "mysql",
+    "discord",
+    "telegram",
+    "webhook",
+    "dump",
+    "mongodump",
+    "pg_dump"
+  ],
+  "author": "byigitt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/byigitt/wbackup.git"
+  },
+  "homepage": "https://github.com/byigitt/wbackup#readme",
+  "bugs": {
+    "url": "https://github.com/byigitt/wbackup/issues"
+  },
   "packageManager": "pnpm@10.11.0",
   "engines": {
     "node": ">=18.0.0"
