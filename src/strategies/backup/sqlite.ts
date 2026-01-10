@@ -5,8 +5,7 @@ import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   BackupError,
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
 } from '../../utils.js';
 
@@ -68,7 +67,7 @@ export class SQLiteBackupStrategy implements BackupStrategy<SQLiteConfig> {
 
     const db = Database(validatedConfig.path, {
       readonly: true,
-      timeout: 5000,
+      timeout: 300000, // 5 minutes for large databases
     });
 
     try {
@@ -84,15 +83,10 @@ export class SQLiteBackupStrategy implements BackupStrategy<SQLiteConfig> {
       // Use native backup API
       await db.backup(outputPath);
 
-      let finalPath = outputPath;
-      let compressed = false;
-
-      if (validatedConfig.compress) {
-        finalPath = await compressFile(outputPath);
-        compressed = true;
-      }
-
-      const sizeBytes = await getFileSize(finalPath);
+      const { finalPath, compressed, sizeBytes } = await maybeCompress(
+        outputPath,
+        validatedConfig.compress
+      );
 
       return {
         filePath: finalPath,

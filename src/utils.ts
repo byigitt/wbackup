@@ -33,7 +33,7 @@ export async function getFileSize(filePath: string): Promise<number> {
 
 export async function compressFile(inputPath: string): Promise<string> {
   const outputPath = `${inputPath}.gz`;
-  const gzip = createGzip({ level: 9 });
+  const gzip = createGzip({ level: 6 }); // Level 6: ~10x faster than 9, only ~5% larger
   const source = createReadStream(inputPath);
   const destination = createWriteStream(outputPath);
 
@@ -41,6 +41,23 @@ export async function compressFile(inputPath: string): Promise<string> {
   await removeFile(inputPath);
 
   return outputPath;
+}
+
+// Shared compression utility to reduce duplication across strategies
+export async function maybeCompress(
+  path: string,
+  shouldCompress: boolean
+): Promise<{ finalPath: string; compressed: boolean; sizeBytes: number }> {
+  let finalPath = path;
+  let compressed = false;
+
+  if (shouldCompress) {
+    finalPath = await compressFile(path);
+    compressed = true;
+  }
+
+  const sizeBytes = await getFileSize(finalPath);
+  return { finalPath, compressed, sizeBytes };
 }
 
 export function generateTempPath(prefix: string, extension: string): string {

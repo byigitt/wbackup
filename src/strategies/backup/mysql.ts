@@ -25,8 +25,7 @@ import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
   runCommand,
 } from '../../utils.js';
@@ -62,15 +61,10 @@ export class MySQLBackupStrategy implements BackupStrategy<MySQLConfig> {
       notFoundMessage: 'mysqldump not found. Please install MySQL client tools.',
     });
 
-    let finalPath = outputPath;
-    let compressed = false;
-
-    if (validatedConfig.compress) {
-      finalPath = await compressFile(outputPath);
-      compressed = true;
-    }
-
-    const sizeBytes = await getFileSize(finalPath);
+    const { finalPath, compressed, sizeBytes } = await maybeCompress(
+      outputPath,
+      validatedConfig.compress
+    );
 
     return {
       filePath: finalPath,

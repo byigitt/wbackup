@@ -3,8 +3,7 @@ import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
   runCommand,
 } from '../../utils.js';
@@ -37,15 +36,10 @@ export class MongoBackupStrategy implements BackupStrategy<MongoConfig> {
       notFoundMessage: 'mongodump not found. Please install MongoDB Database Tools.',
     });
 
-    let finalPath = archivePath;
-    let compressed = false;
-
-    if (validatedConfig.compress) {
-      finalPath = await compressFile(archivePath);
-      compressed = true;
-    }
-
-    const sizeBytes = await getFileSize(finalPath);
+    const { finalPath, compressed, sizeBytes } = await maybeCompress(
+      archivePath,
+      validatedConfig.compress
+    );
 
     return {
       filePath: finalPath,

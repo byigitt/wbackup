@@ -5,8 +5,7 @@ import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   BackupError,
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
 } from '../../utils.js';
 
@@ -93,15 +92,10 @@ export class RedisBackupStrategy implements BackupStrategy<RedisConfig> {
       const outputPath = generateTempPath('redis-backup', '.rdb');
       await copyFile(rdbPath, outputPath);
 
-      let finalPath = outputPath;
-      let compressed = false;
-
-      if (validatedConfig.compress) {
-        finalPath = await compressFile(outputPath);
-        compressed = true;
-      }
-
-      const sizeBytes = await getFileSize(finalPath);
+      const { finalPath, compressed, sizeBytes } = await maybeCompress(
+        outputPath,
+        validatedConfig.compress
+      );
 
       return {
         filePath: finalPath,
@@ -170,12 +164,17 @@ export class RedisBackupStrategy implements BackupStrategy<RedisConfig> {
 
     const startWait = Date.now();
     while (Date.now() - startWait < SAVE_TIMEOUT) {
-      const currentSave = await redis.lastsave();
+      // Single INFO command instead of LASTSAVE + INFO (50% fewer Redis commands)
+      const infoCheck = await redis.info('persistence');
+
+      // Parse rdb_last_save_time from INFO response
+      const lastSaveMatch = infoCheck.match(/rdb_last_save_time:(\d+)/);
+      const currentSave = lastSaveMatch ? parseInt(lastSaveMatch[1], 10) : 0;
+
       if (currentSave > lastSave) {
         return;
       }
 
-      const infoCheck = await redis.info('persistence');
       if (infoCheck.includes('rdb_last_bgsave_status:err')) {
         throw new BackupError('Redis BGSAVE failed', 'backup');
       }
