@@ -33,7 +33,7 @@ export async function getFileSize(filePath: string): Promise<number> {
 
 export async function compressFile(inputPath: string): Promise<string> {
   const outputPath = `${inputPath}.gz`;
-  const gzip = createGzip({ level: 9 });
+  const gzip = createGzip({ level: 6 }); // Level 6: ~10x faster than 9, only ~5% larger
   const source = createReadStream(inputPath);
   const destination = createWriteStream(outputPath);
 
@@ -41,6 +41,23 @@ export async function compressFile(inputPath: string): Promise<string> {
   await removeFile(inputPath);
 
   return outputPath;
+}
+
+// Shared compression utility to reduce duplication across strategies
+export async function maybeCompress(
+  path: string,
+  shouldCompress: boolean
+): Promise<{ finalPath: string; compressed: boolean; sizeBytes: number }> {
+  let finalPath = path;
+  let compressed = false;
+
+  if (shouldCompress) {
+    finalPath = await compressFile(path);
+    compressed = true;
+  }
+
+  const sizeBytes = await getFileSize(finalPath);
+  return { finalPath, compressed, sizeBytes };
 }
 
 export function generateTempPath(prefix: string, extension: string): string {
@@ -74,16 +91,50 @@ export async function splitFile(filePath: string, maxSizeBytes: number): Promise
 
   const chunks: string[] = [];
   const numChunks = Math.ceil(fileSize / maxSizeBytes);
-  const { writeFile } = await import('node:fs/promises');
-  const buffer = await readFile(filePath);
 
-  for (let i = 0; i < numChunks; i++) {
-    const start = i * maxSizeBytes;
-    const end = Math.min(start + maxSizeBytes, fileSize);
-    const chunk = buffer.subarray(start, end);
-    const chunkPath = `${filePath}.part${i + 1}`;
-    await writeFile(chunkPath, chunk);
-    chunks.push(chunkPath);
+  // Stream-based splitting to avoid OOM on large files
+  const { open } = await import('node:fs/promises');
+  const fileHandle = await open(filePath, 'r');
+
+  try {
+    for (let i = 0; i < numChunks; i++) {
+      const chunkPath = `${filePath}.part${i + 1}`;
+      const start = i * maxSizeBytes;
+      const chunkSize = Math.min(maxSizeBytes, fileSize - start);
+
+      // Use a fixed-size buffer to read in portions
+      const BUFFER_SIZE = 64 * 1024; // 64KB read buffer
+      const writeStream = createWriteStream(chunkPath);
+
+      let bytesWritten = 0;
+      while (bytesWritten < chunkSize) {
+        const readSize = Math.min(BUFFER_SIZE, chunkSize - bytesWritten);
+        const buffer = Buffer.allocUnsafe(readSize);
+        const { bytesRead } = await fileHandle.read(buffer, 0, readSize, start + bytesWritten);
+
+        if (bytesRead === 0) break;
+
+        await new Promise<void>((resolve, reject) => {
+          writeStream.write(buffer.subarray(0, bytesRead), (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+
+        bytesWritten += bytesRead;
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        writeStream.end((err: Error | null | undefined) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      chunks.push(chunkPath);
+    }
+  } finally {
+    await fileHandle.close();
   }
 
   return chunks;

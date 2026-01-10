@@ -25,8 +25,7 @@ import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
   runCommand,
 } from '../../utils.js';
@@ -38,7 +37,7 @@ const MySQLConfigSchema = z.object({
   password: z.string(),
   database: z.string(),
   compress: z.boolean().default(true),
-  singleTransaction: z.boolean().default(true),
+  ssl: z.boolean().default(false),
   additionalArgs: z.array(z.string()).default([]),
 });
 
@@ -62,15 +61,10 @@ export class MySQLBackupStrategy implements BackupStrategy<MySQLConfig> {
       notFoundMessage: 'mysqldump not found. Please install MySQL client tools.',
     });
 
-    let finalPath = outputPath;
-    let compressed = false;
-
-    if (validatedConfig.compress) {
-      finalPath = await compressFile(outputPath);
-      compressed = true;
-    }
-
-    const sizeBytes = await getFileSize(finalPath);
+    const { finalPath, compressed, sizeBytes } = await maybeCompress(
+      outputPath,
+      validatedConfig.compress
+    );
 
     return {
       filePath: finalPath,
@@ -98,10 +92,14 @@ export class MySQLBackupStrategy implements BackupStrategy<MySQLConfig> {
       `--port=${config.port}`,
       `--user=${config.user}`,
       `--result-file=${outputPath}`,
+      '--single-transaction',
+      '--quick',
+      '--routines',
+      '--triggers',
     ];
 
-    if (config.singleTransaction) {
-      args.push('--single-transaction');
+    if (config.ssl) {
+      args.push('--ssl-mode=REQUIRED');
     }
 
     args.push(...config.additionalArgs);

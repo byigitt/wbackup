@@ -2,11 +2,13 @@
 import { registerBackupStrategy, registerDeliveryStrategy } from './registry.js';
 import { createMongoBackupStrategy } from './strategies/backup/mongodb.js';
 import { createPostgresBackupStrategy } from './strategies/backup/postgresql.js';
+import { createMySQLBackupStrategy } from './strategies/backup/mysql.js';
 import { createDiscordDeliveryStrategy } from './strategies/delivery/discord.js';
 
 registerBackupStrategy('mongodb', createMongoBackupStrategy);
 registerBackupStrategy('postgresql', createPostgresBackupStrategy);
 registerBackupStrategy('postgres', createPostgresBackupStrategy);
+registerBackupStrategy('mysql', createMySQLBackupStrategy);
 
 registerDeliveryStrategy('discord', createDiscordDeliveryStrategy);
 
@@ -40,12 +42,18 @@ export {
   createPostgresBackupStrategy,
   MySQLBackupStrategy,
   createMySQLBackupStrategy,
+  SQLiteBackupStrategy,
+  createSQLiteBackupStrategy,
+  RedisBackupStrategy,
+  createRedisBackupStrategy,
 } from './strategies/backup/index.js';
 
 export type {
   MongoConfig,
   PostgresConfig,
   MySQLConfig,
+  SQLiteConfig,
+  RedisConfig,
 } from './strategies/backup/index.js';
 
 // Delivery strategy exports

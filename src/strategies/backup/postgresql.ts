@@ -3,8 +3,7 @@ import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
 import {
   generateTempPath,
-  compressFile,
-  getFileSize,
+  maybeCompress,
   removeFile,
   runCommand,
 } from '../../utils.js';
@@ -50,16 +49,9 @@ export class PostgresBackupStrategy implements BackupStrategy<PostgresConfig> {
       notFoundMessage: 'pg_dump not found. Please install PostgreSQL client tools.',
     });
 
-    let finalPath = outputPath;
-    let compressed = false;
-
     // Only compress plain SQL format - others have built-in compression
-    if (validatedConfig.compress && validatedConfig.format === 'plain') {
-      finalPath = await compressFile(outputPath);
-      compressed = true;
-    }
-
-    const sizeBytes = await getFileSize(finalPath);
+    const shouldCompress = validatedConfig.compress && validatedConfig.format === 'plain';
+    const { finalPath, compressed, sizeBytes } = await maybeCompress(outputPath, shouldCompress);
 
     return {
       filePath: finalPath,
