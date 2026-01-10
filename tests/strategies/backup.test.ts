@@ -3,6 +3,8 @@ import {
   MongoBackupStrategy,
   PostgresBackupStrategy,
   MySQLBackupStrategy,
+  SQLiteBackupStrategy,
+  RedisBackupStrategy,
 } from '../../src/strategies/backup/index.js';
 
 describe('MongoBackupStrategy', () => {
@@ -130,10 +132,10 @@ describe('MySQLBackupStrategy', () => {
       const result = strategy.configSchema.parse(config);
       expect(result.user).toBe('root');
       expect(result.database).toBe('testdb');
-      expect(result.host).toBe('localhost'); // default
-      expect(result.port).toBe(3306); // default
-      expect(result.compress).toBe(true); // default
-      expect(result.singleTransaction).toBe(true); // default
+      expect(result.host).toBe('localhost');
+      expect(result.port).toBe(3306);
+      expect(result.compress).toBe(true);
+      expect(result.ssl).toBe(false);
     });
 
     it('should accept optional fields', () => {
@@ -144,19 +146,99 @@ describe('MySQLBackupStrategy', () => {
         password: 'pass',
         database: 'mydb',
         compress: false,
-        singleTransaction: false,
-        additionalArgs: ['--quick'],
+        ssl: true,
+        additionalArgs: ['--skip-routines'],
       };
       const result = strategy.configSchema.parse(config);
       expect(result.host).toBe('192.168.1.100');
       expect(result.port).toBe(3307);
-      expect(result.singleTransaction).toBe(false);
+      expect(result.ssl).toBe(true);
     });
 
     it('should reject missing required fields', () => {
       expect(() => strategy.configSchema.parse({})).toThrow();
       expect(() => strategy.configSchema.parse({ user: 'root' })).toThrow();
       expect(() => strategy.configSchema.parse({ user: 'root', password: 'pass' })).toThrow();
+    });
+  });
+});
+
+describe('SQLiteBackupStrategy', () => {
+  const strategy = new SQLiteBackupStrategy();
+
+  describe('metadata', () => {
+    it('should have correct name', () => {
+      expect(strategy.name).toBe('sqlite');
+    });
+  });
+
+  describe('config validation', () => {
+    it('should validate valid config', () => {
+      const config = { path: '/data/db.sqlite' };
+      const result = strategy.configSchema.parse(config);
+      expect(result.path).toBe('/data/db.sqlite');
+      expect(result.compress).toBe(true);
+    });
+
+    it('should accept optional compress setting', () => {
+      const config = { path: '/data/db.sqlite', compress: false };
+      const result = strategy.configSchema.parse(config);
+      expect(result.compress).toBe(false);
+    });
+
+    it('should reject missing path', () => {
+      expect(() => strategy.configSchema.parse({})).toThrow();
+    });
+
+    it('should reject empty path', () => {
+      expect(() => strategy.configSchema.parse({ path: '' })).toThrow();
+    });
+  });
+});
+
+describe('RedisBackupStrategy', () => {
+  const strategy = new RedisBackupStrategy();
+
+  describe('metadata', () => {
+    it('should have correct name', () => {
+      expect(strategy.name).toBe('redis');
+    });
+  });
+
+  describe('config validation', () => {
+    it('should validate minimal config with defaults', () => {
+      const result = strategy.configSchema.parse({});
+      expect(result.host).toBe('localhost');
+      expect(result.port).toBe(6379);
+      expect(result.database).toBe(0);
+      expect(result.compress).toBe(true);
+      expect(result.tls).toBe(false);
+    });
+
+    it('should accept custom rdbPath', () => {
+      const config = { rdbPath: '/var/lib/redis/dump.rdb' };
+      const result = strategy.configSchema.parse(config);
+      expect(result.rdbPath).toBe('/var/lib/redis/dump.rdb');
+    });
+
+    it('should accept password and TLS', () => {
+      const config = {
+        host: 'redis.example.com',
+        port: 6380,
+        password: 'secret',
+        tls: true,
+      };
+      const result = strategy.configSchema.parse(config);
+      expect(result.host).toBe('redis.example.com');
+      expect(result.port).toBe(6380);
+      expect(result.password).toBe('secret');
+      expect(result.tls).toBe(true);
+    });
+
+    it('should accept database number', () => {
+      const config = { database: 5 };
+      const result = strategy.configSchema.parse(config);
+      expect(result.database).toBe(5);
     });
   });
 });

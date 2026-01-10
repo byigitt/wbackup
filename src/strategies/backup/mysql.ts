@@ -38,7 +38,7 @@ const MySQLConfigSchema = z.object({
   password: z.string(),
   database: z.string(),
   compress: z.boolean().default(true),
-  singleTransaction: z.boolean().default(true),
+  ssl: z.boolean().default(false),
   additionalArgs: z.array(z.string()).default([]),
 });
 
@@ -98,10 +98,14 @@ export class MySQLBackupStrategy implements BackupStrategy<MySQLConfig> {
       `--port=${config.port}`,
       `--user=${config.user}`,
       `--result-file=${outputPath}`,
+      '--single-transaction',
+      '--quick',
+      '--routines',
+      '--triggers',
     ];
 
-    if (config.singleTransaction) {
-      args.push('--single-transaction');
+    if (config.ssl) {
+      args.push('--ssl-mode=REQUIRED');
     }
 
     args.push(...config.additionalArgs);

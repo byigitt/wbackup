@@ -1,0 +1,103 @@
+import { basename } from 'node:path';
+import { access, constants } from 'node:fs/promises';
+import { z } from 'zod';
+import type { BackupResult, BackupStrategy } from '../../types.js';
+import {
+  BackupError,
+  generateTempPath,
+  compressFile,
+  getFileSize,
+  removeFile,
+} from '../../utils.js';
+
+const SQLiteConfigSchema = z.object({
+  path: z.string().min(1, 'Database path is required'),
+  compress: z.boolean().default(true),
+});
+
+export type SQLiteConfig = z.infer<typeof SQLiteConfigSchema>;
+
+export class SQLiteBackupStrategy implements BackupStrategy<SQLiteConfig> {
+  readonly name = 'sqlite';
+  readonly configSchema = SQLiteConfigSchema;
+
+  async backup(config: SQLiteConfig): Promise<BackupResult> {
+    const validatedConfig = this.configSchema.parse(config);
+    const startTime = Date.now();
+
+    // Verify file exists
+    try {
+      await access(validatedConfig.path, constants.R_OK);
+    } catch {
+      throw new BackupError(
+        `SQLite database file not found: ${validatedConfig.path}`,
+        'backup'
+      );
+    }
+
+    // Dynamic import for optional dependency
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let Database: any;
+    try {
+      Database = (await import('better-sqlite3')).default;
+    } catch {
+      throw new BackupError(
+        'better-sqlite3 is required for SQLite backups. Install it with: pnpm add better-sqlite3',
+        'backup'
+      );
+    }
+
+    const db = Database(validatedConfig.path, {
+      readonly: true,
+      timeout: 5000,
+    });
+
+    try {
+      // Checkpoint WAL if in WAL mode
+      try {
+        db.pragma('wal_checkpoint(PASSIVE)');
+      } catch {
+        // Not in WAL mode, ignore
+      }
+
+      const outputPath = generateTempPath('sqlite-backup', '.db');
+
+      // Use native backup API
+      await db.backup(outputPath);
+
+      let finalPath = outputPath;
+      let compressed = false;
+
+      if (validatedConfig.compress) {
+        finalPath = await compressFile(outputPath);
+        compressed = true;
+      }
+
+      const sizeBytes = await getFileSize(finalPath);
+
+      return {
+        filePath: finalPath,
+        fileName: basename(finalPath),
+        sizeBytes,
+        database: basename(validatedConfig.path),
+        createdAt: new Date(),
+        compressed,
+        metadata: {
+          type: 'sqlite',
+          duration: Date.now() - startTime,
+          sourcePath: validatedConfig.path,
+        },
+      };
+    } finally {
+      db.close();
+    }
+  }
+
+  async cleanup(filePath: string): Promise<void> {
+    await removeFile(filePath);
+  }
+}
+
+export function createSQLiteBackupStrategy(): BackupStrategy<SQLiteConfig> {
+  return new SQLiteBackupStrategy();
+}

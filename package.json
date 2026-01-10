@@ -28,12 +28,15 @@
     "mongodb",
     "postgresql",
     "mysql",
+    "sqlite",
+    "redis",
     "discord",
     "telegram",
     "webhook",
     "dump",
     "mongodump",
-    "pg_dump"
+    "pg_dump",
+    "mysqldump"
   ],
   "author": "byigitt",
   "license": "MIT",
@@ -50,6 +53,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.0.3",
     "@vitest/coverage-v8": "^4.0.16",
     "typescript": "^5.9.3",
@@ -57,5 +61,17 @@
   },
   "dependencies": {
     "zod": "^4.3.5"
+  },
+  "peerDependencies": {
+    "better-sqlite3": "^11.0.0",
+    "ioredis": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "better-sqlite3": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
   }
 }
