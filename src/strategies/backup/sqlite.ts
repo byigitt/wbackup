@@ -1,4 +1,4 @@
-import { basename } from 'node:path';
+import { basename, extname } from 'node:path';
 import { access, constants } from 'node:fs/promises';
 import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
@@ -9,6 +9,24 @@ import {
   getFileSize,
   removeFile,
 } from '../../utils.js';
+
+const VALID_SQLITE_EXTENSIONS = ['.db', '.sqlite', '.sqlite3'];
+
+function validateSqlitePath(dbPath: string): void {
+  const ext = extname(dbPath).toLowerCase();
+  if (!VALID_SQLITE_EXTENSIONS.includes(ext)) {
+    throw new BackupError(
+      `Invalid SQLite path: must end with ${VALID_SQLITE_EXTENSIONS.join(', ')}`,
+      'backup'
+    );
+  }
+  if (dbPath.includes('..')) {
+    throw new BackupError(
+      'Invalid SQLite path: path traversal not allowed',
+      'backup'
+    );
+  }
+}
 
 const SQLiteConfigSchema = z.object({
   path: z.string().min(1, 'Database path is required'),
@@ -23,6 +41,7 @@ export class SQLiteBackupStrategy implements BackupStrategy<SQLiteConfig> {
 
   async backup(config: SQLiteConfig): Promise<BackupResult> {
     const validatedConfig = this.configSchema.parse(config);
+    validateSqlitePath(validatedConfig.path);
     const startTime = Date.now();
 
     // Verify file exists

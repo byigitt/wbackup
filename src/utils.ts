@@ -74,16 +74,50 @@ export async function splitFile(filePath: string, maxSizeBytes: number): Promise
 
   const chunks: string[] = [];
   const numChunks = Math.ceil(fileSize / maxSizeBytes);
-  const { writeFile } = await import('node:fs/promises');
-  const buffer = await readFile(filePath);
 
-  for (let i = 0; i < numChunks; i++) {
-    const start = i * maxSizeBytes;
-    const end = Math.min(start + maxSizeBytes, fileSize);
-    const chunk = buffer.subarray(start, end);
-    const chunkPath = `${filePath}.part${i + 1}`;
-    await writeFile(chunkPath, chunk);
-    chunks.push(chunkPath);
+  // Stream-based splitting to avoid OOM on large files
+  const { open } = await import('node:fs/promises');
+  const fileHandle = await open(filePath, 'r');
+
+  try {
+    for (let i = 0; i < numChunks; i++) {
+      const chunkPath = `${filePath}.part${i + 1}`;
+      const start = i * maxSizeBytes;
+      const chunkSize = Math.min(maxSizeBytes, fileSize - start);
+
+      // Use a fixed-size buffer to read in portions
+      const BUFFER_SIZE = 64 * 1024; // 64KB read buffer
+      const writeStream = createWriteStream(chunkPath);
+
+      let bytesWritten = 0;
+      while (bytesWritten < chunkSize) {
+        const readSize = Math.min(BUFFER_SIZE, chunkSize - bytesWritten);
+        const buffer = Buffer.allocUnsafe(readSize);
+        const { bytesRead } = await fileHandle.read(buffer, 0, readSize, start + bytesWritten);
+
+        if (bytesRead === 0) break;
+
+        await new Promise<void>((resolve, reject) => {
+          writeStream.write(buffer.subarray(0, bytesRead), (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+
+        bytesWritten += bytesRead;
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        writeStream.end((err: Error | null | undefined) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      chunks.push(chunkPath);
+    }
+  } finally {
+    await fileHandle.close();
   }
 
   return chunks;

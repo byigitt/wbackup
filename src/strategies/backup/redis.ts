@@ -1,4 +1,4 @@
-import { basename, join } from 'node:path';
+import { basename, join, extname } from 'node:path';
 import { copyFile } from 'node:fs/promises';
 import { z } from 'zod';
 import type { BackupResult, BackupStrategy } from '../../types.js';
@@ -9,6 +9,21 @@ import {
   getFileSize,
   removeFile,
 } from '../../utils.js';
+
+function validateRdbPath(rdbPath: string): void {
+  if (extname(rdbPath).toLowerCase() !== '.rdb') {
+    throw new BackupError(
+      'Invalid RDB path: must end with .rdb extension',
+      'backup'
+    );
+  }
+  if (rdbPath.includes('..')) {
+    throw new BackupError(
+      'Invalid RDB path: path traversal not allowed',
+      'backup'
+    );
+  }
+}
 
 const RedisConfigSchema = z.object({
   host: z.string().default('localhost'),
@@ -71,6 +86,7 @@ export class RedisBackupStrategy implements BackupStrategy<RedisConfig> {
       await this.waitForReady(redis);
 
       const rdbPath = validatedConfig.rdbPath || (await this.discoverRdbPath(redis));
+      validateRdbPath(rdbPath);
 
       await this.triggerAndWaitForSave(redis);
 
